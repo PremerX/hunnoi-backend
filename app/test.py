@@ -1,4 +1,3 @@
-import traceback
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.websockets import WebSocketState
@@ -6,13 +5,16 @@ from websockets.exceptions import ConnectionClosed
 from queue import Queue
 from threading import Thread, Lock
 from contextlib import asynccontextmanager
-from Process.yt_audio import main as yt_main
+from .process.yt_audio import youtube_process_main
 from fastapi.middleware.cors import CORSMiddleware
 from py_youtube import Data
 from pydantic import BaseModel
+from dotenv import load_dotenv
+import os
 import asyncio
 import uuid
 import logging
+import traceback
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -22,12 +24,13 @@ async def lifespan(app: FastAPI):
     for _ in range(max_workers):
         queue.put(None)
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - [%(funcName)s] - %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)s - %(funcName)20s] - %(message)s")
 logger = logging.getLogger(__name__)
 
 app = FastAPI(lifespan=lifespan)
 origins = [
     "http://localhost:5173",
+    "http://staging-hunnoi.premerx.tech",
 ]
 
 app.add_middleware(
@@ -38,8 +41,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+load_dotenv()
+DEFAULT_MAX_QUEUE = 5
+DEFAULT_MAX_WORKERS = 1
+max_queue = int(os.getenv("MAX_QUEUE", DEFAULT_MAX_QUEUE))
+max_workers = int(os.getenv("MAX_WORKERS", DEFAULT_MAX_WORKERS))
+logger.info(f"Max queue size: {max_queue}, Max workers: {max_workers}")
+
 # Global queue and related data
-queue = Queue(maxsize=6)  # Limit queue size to 10
+queue = Queue(maxsize=max_queue)  # Limit queue size to 10
 queue_lock = Lock()
 clients = {}  # Map WebSocket to its queue position
 active_workers = 0  # Track active workers
@@ -82,7 +92,7 @@ def update_queue_positions():
                         )
                         position += 1
                 except Exception as e:
-                    print(f"Error updating queue position: {e}")
+                    logger.error(f"Error updating queue position: {e}")
 
     if not update_task or update_task.done():
         update_task = asyncio.run_coroutine_threadsafe(asyncio.to_thread(send_updates), main_event_loop)
@@ -111,14 +121,17 @@ def worker():
                         ws.send_json({"status": "Processing"}), main_event_loop
                     ).result()
 
-                asyncio.run_coroutine_threadsafe(yt_main(url,tag,ws), main_event_loop).result()
+                try:
+                    asyncio.run_coroutine_threadsafe(youtube_process_main(url,tag,ws), main_event_loop).result()
+                except Exception as e:
+                    print(f"Error from during youtube task: {traceback.print_exception(e)}")
 
                 if ws.client_state == WebSocketState.CONNECTED:
                     asyncio.run_coroutine_threadsafe(ws.close(), main_event_loop).result()
         except WebSocketDisconnect:
             print("Client disconnected during task processing")
         except Exception as e:
-            print(f"Error during task processing: {traceback.print_exception(e)}")
+            print(f"Error during worker processing: {traceback.print_exception(e)}")
         finally:
             with queue_lock:
                 active_workers -= 1
@@ -133,10 +146,11 @@ for _ in range(max_workers):
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     # Check if queue is full
-    if queue.full():
-        await websocket.close(code=1008)
-        return
     await websocket.accept()
+    if queue.full():
+        await websocket.send_json({"status": "QueueFull"})
+        await websocket.close()
+        return
     try:
         # Add client to queue
         with queue_lock:

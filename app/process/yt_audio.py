@@ -3,10 +3,9 @@ import yt_dlp
 import librosa
 import numpy as np
 from pydub import AudioSegment
-import os
+from os import getenv, path
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
-from dotenv import load_dotenv
 import boto3
 import tempfile
 import re
@@ -91,12 +90,12 @@ def calculate_segments_numpy(audio_path, frame_length=2048, hop_length=1024, thr
 def split_and_save(input_file, temp_dir, segments, base_name=None):
     audio = AudioSegment.from_file(input_file)
     if base_name is None:
-        base_name = os.path.splitext(os.path.basename(input_file))[0]
+        base_name = path.splitext(path.basename(input_file))[0]
 
     def save_segment(i, start, end):
         start_ms = start * 1000
         end_ms = end * 1000
-        output_file = os.path.join(temp_dir, f"{i:02}_{base_name}.mp3")
+        output_file = path.join(temp_dir, f"{i:02}_{base_name}.mp3")
         target_audio = audio[start_ms:end_ms]
         target_audio.export(output_file, format="mp3")
         return output_file
@@ -112,22 +111,24 @@ def split_and_save(input_file, temp_dir, segments, base_name=None):
 def zip_files(song_files, zip_file_path):
     with zipfile.ZipFile(zip_file_path, 'w', compression=zipfile.ZIP_DEFLATED) as zipf:
         for file in song_files:
-            zipf.write(file, os.path.basename(file))
+            zipf.write(file, path.basename(file))
     print(f"Zipped {len(song_files)} files into {zip_file_path}")
 
 def upload_to_s3_and_generate_link(zip_file_path, object_name = None):
-    load_dotenv()
     try:
-        access_key = os.getenv("MINIO_ACCESS_KEY")
-        secret_key = os.getenv("MINIO_SECRET_KEY")
-        endpoint_url = os.getenv("MINIO_ENDPOINT_URL")
-        bucket_name = os.getenv("MINIO_BUCKET_NAME")
+        access_key = getenv("MINIO_ACCESS_KEY")
+        secret_key = getenv("MINIO_SECRET_KEY")
+        endpoint_url = getenv("MINIO_ENDPOINT_URL")
+        public_url = getenv("MINIO_PUBLIC_URL")
+        bucket_name = getenv("MINIO_BUCKET")
+        region_name = getenv("MINIO_REGION")
 
         s3_client = boto3.client(
             's3',
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
-            endpoint_url=endpoint_url
+            endpoint_url=endpoint_url,
+            region_name=region_name
         )
 
         if object_name is None:
@@ -143,6 +144,9 @@ def upload_to_s3_and_generate_link(zip_file_path, object_name = None):
             Params={'Bucket': bucket_name, 'Key': object_name},
             ExpiresIn=3600
         )
+        print(f"Presigned URL: {presigned_url}")
+        presigned_url = presigned_url.replace(endpoint_url, public_url)
+        print(f"Public URL: {presigned_url}")
         return presigned_url
 
     except Exception as e:
@@ -150,7 +154,7 @@ def upload_to_s3_and_generate_link(zip_file_path, object_name = None):
 
 # -af loudnorm=I=-14:TP=-1.5:LRA=11 # normalize audio
 
-async def main(url, tag, ws):
+async def youtube_process_main(url, tag, ws):
 
     print(f"Downloading audio from {url}...")
     await ws.send_json({"status": "Processing", "msg": "กำลังดึงข้อมูลเพลงใน Playlist"})
@@ -159,23 +163,23 @@ async def main(url, tag, ws):
         title, ids = await asyncio.to_thread(download_audio, url, tag, temp_dir)
         print("Download completed.")
         await ws.send_json({"status": "Processing", "msg": "กำลังตรวจสอบเพลง"})
-        raw_song_file = os.path.join(temp_dir, tag, f"{ids}.mp3")
+        raw_song_file = path.join(temp_dir, tag, f"{ids}.mp3")
         segments = await asyncio.to_thread(calculate_segments_numpy, raw_song_file)
 
         if(len(segments) <= 2):
             presigned_url = await asyncio.to_thread(
                 upload_to_s3_and_generate_link,
-                os.path.join(temp_dir, tag, f"{ids}.mp3"),
+                path.join(temp_dir, tag, f"{ids}.mp3"),
                 f"{tag}/{title}.mp3"
             )
             await ws.send_json({"status": "Break", "msg": "Playlist นี้ ไม่สามารถแบ่งเพลงได้ แต่คุณสามารถดาวน์โหลดได้", "download_url": presigned_url})
             return
         
         await ws.send_json({"status": "Processing", "msg": "Playlist นี้แบ่งได้ กำลังแบ่งเพลง"})
-        split_song_files = await asyncio.to_thread(split_and_save, raw_song_file, os.path.join(temp_dir, tag), segments, title)
+        split_song_files = await asyncio.to_thread(split_and_save, raw_song_file, path.join(temp_dir, tag), segments, title)
 
         await ws.send_json({"status": "Processing", "msg": "แบ่งเพลงสำเร็จ รออีกนิด กำลังสร้างลิ้งดาวน์โหลด"})
-        zip_path = os.path.join(temp_dir, tag, f"playlist_{title}.zip")
+        zip_path = path.join(temp_dir, tag, f"playlist_{title}.zip")
         await asyncio.to_thread(zip_files, split_song_files, zip_path)
         presigned_url = await asyncio.to_thread(
             upload_to_s3_and_generate_link,

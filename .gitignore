@@ -178,3 +178,9 @@ cython_debug/
 Scripts/
 share/
 Include/
+.env*
+.flaskenv*
+!.env.project
+!.env.vault
+
+compose-local.yml
