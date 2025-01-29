@@ -1,5 +1,5 @@
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.websockets import WebSocketState
 from websockets.exceptions import ConnectionClosed
 from queue import Queue
@@ -26,20 +26,6 @@ async def lifespan(app: FastAPI):
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)s - %(funcName)20s] - %(message)s")
 logger = logging.getLogger(__name__)
-
-app = FastAPI(lifespan=lifespan)
-origins = [
-    "http://localhost:5173",
-    "http://staging-hunnoi.premerx.tech",
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 load_dotenv()
 DEFAULT_MAX_QUEUE = 5
@@ -143,7 +129,9 @@ for _ in range(max_workers):
     worker_thread = Thread(target=worker, daemon=True)
     worker_thread.start()
 
-@app.websocket("/ws")
+router = APIRouter(prefix="/hunnoi")
+
+@router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     # Check if queue is full
     await websocket.accept()
@@ -183,7 +171,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 # Endpoint for monitoring/debugging (optional)
-@app.get("/queue-status")
+@router.get("/queue-status")
 async def get_queue_status():
     with queue_lock:
         return {
@@ -196,11 +184,11 @@ async def get_queue_status():
 class URLCheck(BaseModel):
     url: str
 
-@app.get("/hello")
+@router.get("/hello")
 async def hello_world():
     return {"message": "Hello, World!"}
 
-@app.post("/validate")
+@router.post("/validate")
 async def YouTubeUrlValidate(req: URLCheck):
     try:
         yt_data = Data(req.url).data()
@@ -218,3 +206,19 @@ async def YouTubeUrlValidate(req: URLCheck):
     except Exception as err:
         logger.error(f"Internal server error: {err}, type: {type(err)}")
         raise HTTPException(status_code=500, detail="Internal server error.")
+    
+app = FastAPI(lifespan=lifespan)
+app.include_router(router)
+
+origins = [
+    "http://localhost:5173",
+    "http://hunnoi.premerx.tech",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)

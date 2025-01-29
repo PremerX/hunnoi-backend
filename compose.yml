@@ -12,3 +12,5 @@ services:
       - main-service
 networks:
   main-service:
+    name: main-service
+    external: true
