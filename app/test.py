@@ -211,8 +211,7 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(router)
 
 origins = [
-    "http://localhost:5173",
-    "http://hunnoi.premerx.tech",
+    "https://hunnoi.premerx.tech",
 ]
 
 app.add_middleware(
