@@ -1,8 +1,11 @@
 from datetime import timedelta
+import re
 import boto3
 from dotenv import load_dotenv
 from minio import Minio
 from os import getenv
+import requests
+import yt_dlp
 
 
 def upload_to_s3_and_generate_link(zip_file_path, object_name = None):
@@ -82,10 +85,24 @@ def test(zip_file_path, object_name = None):
     except Exception as e:
         print(f"An error occurred at upload file to S3 : {type(e)} {e}")
 
+def test_url(link):
+    ydl_opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "format": "best",
+        'cookiefile': '/code/app/cookies.txt',
+    }
 
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(link, download=False)
+    print(info.get("title"))
+    print(info.get("thumbnail"))
 # การใช้งาน
-zip_file_path = "main.py"
-object_name = "samva/main.py"
+# zip_file_path = "main.py"
+# object_name = "samva/main.py"
 
-# test(zip_file_path, object_name)
-upload_to_s3_and_generate_link(zip_file_path, object_name)
+# # test(zip_file_path, object_name)
+# upload_to_s3_and_generate_link(zip_file_path, object_name)
+
+# test_url("https://www.youtube.com/watch?v=rc7KnQAh_1I")
+test_url("https://www.youtube.com/watch?v=sB5bHrdm0Lo")

@@ -39,4 +39,4 @@ COPY ./app /code/app
 EXPOSE 8000
 
 # ใช้ Uvicorn สำหรับ production
-CMD ["sh", "-c", "ffmpeg -version && uvicorn app.test:app --host 0.0.0.0 --port 8000 --proxy-headers"]
+CMD ["uvicorn", "app.test:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

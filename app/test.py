@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from py_youtube import Data
 from pydantic import BaseModel
 from dotenv import load_dotenv
+import yt_dlp
 import os
 import asyncio
 import uuid
@@ -191,14 +192,15 @@ async def hello_world():
 @router.post("/validate")
 async def YouTubeUrlValidate(req: URLCheck):
     try:
-        yt_data = Data(req.url).data()
-        if yt_data["id"] != None:
-            return {'id': yt_data['id'],
-                    'title': yt_data['title'],
-                    'thumbnails': yt_data['thumbnails']}
-        else:
-            logger.warning(f"Invalid YouTube URL: {req.url}")
-            raise HTTPException(status_code=400, detail="This YouTube URL is invalid.")
+        ydl_opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "format": "best"
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(req.url, download=False)
+        print(info)
     except HTTPException as http_err:
         raise http_err
     except ValueError:
