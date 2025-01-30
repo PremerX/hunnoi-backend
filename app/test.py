@@ -196,10 +196,12 @@ async def YouTubeUrlValidate(req: URLCheck):
             "format": "best",
             "cookiefile": os.getenv("COOKIE_PATH"),
             "verbose": True,
-            "sleep_interval_requests": 1.2,
-            "sleep_interval": 60,
-            "max_sleep_interval": 90,
-            "extractor_args": f'youtube:po_token={os.getenv("PO_TOKEN")}',
+            "sleep_interval_requests": 1,
+            "extractor_args": {
+                'youtube': {
+                    'player_client': ['web'],
+                },
+        },
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
