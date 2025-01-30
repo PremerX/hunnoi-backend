@@ -194,7 +194,7 @@ async def YouTubeUrlValidate(req: URLCheck):
     try:
         ydl_opts = {
             "format": "best",
-            "cookiefile": {os.getenv("COOKIE_PATH")},
+            "cookiefile": os.getenv("COOKIE_PATH"),
             "verbose": True,
             "sleep_interval_requests": 1.2,
             "sleep_interval": 60,
