@@ -12,6 +12,7 @@ services:
       - /root/hunnoi-backend/youtube_cookies.txt:/code/app/cookies.txt
     networks:
       - main-service
+    restart: unless-stopped
 networks:
   main-service:
     name: main-service
