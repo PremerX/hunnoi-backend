@@ -41,6 +41,12 @@ def download_audio(url, tag, output_path="downloads", preferred_format="mp3", qu
     # ตั้งค่า options สำหรับ audio
     ydl_opts = {
         'format': 'bestaudio/best',
+        "cookiefile": {getenv("COOKIE_PATH")},
+        "verbose": True,
+        "sleep_interval_requests": 1.2,
+        "sleep_interval": 60,
+        "max_sleep_interval": 90,
+        "extractor_args": f'youtube:po_token={getenv("PO_TOKEN")}',
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': preferred_format,

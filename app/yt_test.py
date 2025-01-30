@@ -87,14 +87,14 @@ def test(zip_file_path, object_name = None):
 
 def test_url(link):
     ydl_opts = {
-        "quiet": True,
-        "no_warnings": True,
+        "verbose": True,
         "format": "best",
-        'cookiefile': '/code/app/cookies.txt',
+        'cookiefile': None,
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(link, download=False)
+    print(info.get("id"))
     print(info.get("title"))
     print(info.get("thumbnail"))
 # การใช้งาน

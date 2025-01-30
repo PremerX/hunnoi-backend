@@ -193,14 +193,21 @@ async def hello_world():
 async def YouTubeUrlValidate(req: URLCheck):
     try:
         ydl_opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "format": "best"
+            "format": "best",
+            "cookiefile": {os.getenv("COOKIE_PATH")},
+            "verbose": True,
+            "sleep_interval_requests": 1.2,
+            "sleep_interval": 60,
+            "max_sleep_interval": 90,
+            "extractor_args": f'youtube:po_token={os.getenv("PO_TOKEN")}',
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(req.url, download=False)
         print(info)
+        return {'id': info.get("id"),
+                'title': info.get("title"),
+                'thumbnails': info.get("thumbnail")}
     except HTTPException as http_err:
         raise http_err
     except ValueError:
