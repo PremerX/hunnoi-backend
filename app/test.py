@@ -201,7 +201,7 @@ async def YouTubeUrlValidate(req: URLCheck):
                 'youtube': {
                     'player_client': ['web'],
                 },
-        },
+            },
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
