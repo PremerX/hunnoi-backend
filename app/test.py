@@ -40,7 +40,6 @@ queue = Queue(maxsize=max_queue)  # Limit queue size to 10
 queue_lock = Lock()
 clients = {}  # Map WebSocket to its queue position
 active_workers = 0  # Track active workers
-max_workers = 1  # Limit concurrent active workers
 
 # Get the main event loop
 main_event_loop = asyncio.get_event_loop()
@@ -206,7 +205,6 @@ async def YouTubeUrlValidate(req: URLCheck):
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(req.url, download=False)
-        print(info)
         return {'id': info.get("id"),
                 'title': info.get("title"),
                 'thumbnails': info.get("thumbnail")}
