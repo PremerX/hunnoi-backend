@@ -8,5 +8,5 @@ pydantic==2.10.5
 pydub==0.25.1
 python-dotenv==1.0.1
 websockets==14.2
-yt_dlp==2025.1.26
+yt_dlp
 uvicorn[standard]==0.34.0

@@ -1,12 +1,11 @@
 from fastapi import APIRouter, FastAPI, WebSocket
 from fastapi.concurrency import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
-from request_arg import URLCheck
+from app.ValidateYoutubeUrl import ValidateYoutubeUrl
+from app.WebsocketManager import WebsocketManager
+from app.WorkerManager import WorkerManager
+from app.request_arg import URLCheck
 from dotenv import load_dotenv
-from phase2.websocketManager import WebsocketManager
-from phase2.QueueManager import QueueManager
-from phase2.WorkerManager import WorkerManager
-from project.validate import ValidateYoutubeUrl
 
 load_dotenv()
 
@@ -19,9 +18,8 @@ ws_manager = WebsocketManager(worker_manager=worker_manager)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yield
-    print("Application is shutting down... Stopping worker threads.")
+    print("Application is shutting down... Stopping websocket connections.")
     # Signal the worker threads to stop
-    # await worker_manager.shutdown()
     await ws_manager.close_all()
 
 @router.get("/ping")

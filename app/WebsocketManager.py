@@ -1,9 +1,10 @@
-import asyncio
-import traceback
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.websockets import WebSocketState
-from phase2.WorkerManager import WorkerManager
-from phase2.loggerInstance import logger
+from app.WorkerManager import WorkerManager
+from app.LoggerInstance import logger
+import traceback
+import asyncio
+
 
 class WebsocketManager:
     def __init__(self, max_connections: int = 10, worker_manager: WorkerManager = None):
@@ -18,10 +19,10 @@ class WebsocketManager:
                 await self.my_queue_position(ws)
                 await self.workers_manager.run(ws)
             except WebSocketDisconnect:
-                await self.broadcast_queue_positions(ws)
                 ws_id = ws.headers.get("sec-websocket-key", "unknown")
                 logger.info(f"websocket connection [{ws_id}] dissconnected")
             finally:
+                await self.broadcast_queue_positions(ws)
                 await self.disconnect(ws)
 
 
@@ -31,7 +32,7 @@ class WebsocketManager:
             if self.is_connection_full():
                 ws_id = ws.headers.get("sec-websocket-key", "unknown")
                 logger.warning(f"Queue is full! Rejecting WebSocket [{ws_id}]")
-                await ws.send_json({"status": "QueueFull"})
+                await ws.send_json({"status": "queuefull"})
                 await ws.close(code=1001)
                 return False
             self.connections.append(ws)
@@ -44,20 +45,24 @@ class WebsocketManager:
 
     async def close_all(self):
         for ws in self.connections:
-            await ws.close()
+            try:
+                await ws.close()
+            except RuntimeError:
+                ws_id = ws_alive.headers.get("sec-websocket-key", "unknown")
+                logger.info(f"During broadcast queue position, connection [{ws_id}] is closed before. Skipping")
         self.connections.clear()
 
     async def my_queue_position(self, ws: WebSocket):
         async with self.lock:
             connection_index = self.connections.index(ws)
-        await ws.send_json({"status": "Queuing", "queue_position": connection_index + 1})
+        await ws.send_json({"status": "queuing", "queue_position": connection_index + 1})
 
     async def broadcast_queue_positions(self, ws: WebSocket):
         async with self.lock:
             connection_index = self.connections.index(ws)
             for position, ws_alive in enumerate(self.connections[connection_index + 1:], start=connection_index + 1):
                 try:
-                    await ws_alive.send_json({ "status": "Queuing", "queue_position": position })
+                    await ws_alive.send_json({ "status": "queuing", "queue_position": position })
                 except RuntimeError:
                     ws_id = ws_alive.headers.get("sec-websocket-key", "unknown")
                     logger.info(f"During broadcast queue position, connection [{ws_id}] is closed before. Skipping")

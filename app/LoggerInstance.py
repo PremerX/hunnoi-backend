@@ -8,7 +8,7 @@ if not logger.hasHandlers():
     console_handler.setLevel(logging.INFO)
 
     formatter = logging.Formatter(
-        "%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)s - %(funcName)20s] - %(message)s"
+        "%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)s - %(funcName)s] - %(message)s"
     )
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
