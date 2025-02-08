@@ -184,3 +184,4 @@ Include/
 !.env.vault
 
 compose-local.yml
+.idea/
