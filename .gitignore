@@ -172,3 +172,16 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# venv
+*.cfg
+Scripts/
+share/
+Include/
+.env*
+.flaskenv*
+!.env.project
+!.env.vault
+
+compose-local.yml
+.idea/
