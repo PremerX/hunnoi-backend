@@ -16,11 +16,11 @@ FROM python:3.12-slim AS runtime
 WORKDIR /code
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget gnupg2 \
-    && wget -O /etc/apt/trusted.gpg.d/deb-multimedia-keyring.gpg https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2023.03.30_all.deb \
-    && echo "deb http://www.deb-multimedia.org bookworm main non-free" | tee /etc/apt/sources.list.d/multimedia.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    curl xz-utils \
+    && curl -L -o /tmp/ffmpeg.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz \
+    && tar -xJf /tmp/ffmpeg.tar.xz -C /usr/local/bin --strip-components=1 \
+    && chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe \
+    && rm -f /tmp/ffmpeg.tar.xz \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
