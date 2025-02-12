@@ -2,16 +2,17 @@ from concurrent.futures import ThreadPoolExecutor
 from zipfile import ZipFile, ZIP_DEFLATED
 from tempfile import TemporaryDirectory
 from app.ProcessEnum import ProcessEnum
+from os import getenv, path, cpu_count
 from app.LoggerInstance import logger
 from pydub import AudioSegment
 from fastapi import WebSocket
 from yt_dlp import YoutubeDL
-from os import getenv, path
 from re import sub
 import numpy as np
 import boto3
 import asyncio
 import librosa
+import gc
 
 class PlaylistSplitter:
     def __init__(self, url: str, tag: str, websocket: WebSocket):
@@ -127,9 +128,9 @@ class PlaylistSplitter:
         return title, ids
 
     @staticmethod
-    def calculate_segments_numpy(audio_path, frame_length=2048, hop_length=1024, threshold=0.005,
+    def calculate_segments_numpy(audio_file_path, frame_length=2048, hop_length=1024, threshold=0.005,
                                  short_silence_threshold=0.75):
-        y, sr = librosa.load(audio_path, sr=16000)
+        y, sr = librosa.load(audio_file_path, sr=16000)
         rms = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length)[0]
         non_silence_frames = rms < threshold
         times = librosa.frames_to_time(np.arange(len(rms)), sr=sr, hop_length=hop_length)
@@ -163,6 +164,8 @@ class PlaylistSplitter:
         song_duration_pairs = np.column_stack((silence_midpoints[:-1], silence_midpoints[1:]))
         print(song_duration_pairs)
 
+        del y
+        gc.collect()
         return song_duration_pairs
 
     @staticmethod
@@ -180,6 +183,58 @@ class PlaylistSplitter:
                 return start_indices, end_indices
 
         return start_indices, end_indices
+
+    @staticmethod
+    def split_and_save(audio_file_path, temp_dir, segments, base_name=None, max_threads: int = None):
+        """
+        Split an audio file into segments and save them as MP3 files.
+
+        :param audio_file_path: Path to the input audio file.
+        :param temp_dir: Directory to save the split audio files.
+        :param segments: List of tuples (start, end) in seconds.
+        :param base_name: Optional base name for output files.
+        :param max_threads: Number of threads to use; if None, use system CPU count.
+        :return: List of saved file paths.
+        """
+        # Determine max_threads dynamically if not set
+        if max_threads is None:
+            max_threads = cpu_count() or 1 # Use available CPU cores, default to 1 if unknown
+
+        # Load audio file
+        with open(audio_file_path, "rb") as f:
+            audio = AudioSegment.from_file(f, format="mp3")
+
+        if base_name is None:
+            base_name = path.splitext(path.basename(audio_file_path))[0]
+
+        def save_segment(i, start, end):
+            start_ms = start * 1000
+            end_ms = end * 1000
+            output_file = path.join(temp_dir, f"{i:02}_{base_name}.mp3")
+            target_audio = audio[start_ms:end_ms]
+            target_audio.export(output_file, format="mp3")
+            del target_audio
+            return output_file
+
+        song_files = []
+        with ThreadPoolExecutor(max_workers=max_threads) as executor:
+            futures = [
+                executor.submit(save_segment, i, start, end)
+                for i, (start, end) in enumerate(segments, start=1)
+            ]
+            for future in futures:
+                song_files.append(future.result())
+
+        del audio
+        gc.collect()
+        return song_files
+
+    @staticmethod
+    def zip_files(song_files, zip_file_path):
+        with ZipFile(zip_file_path, 'w', compression=ZIP_DEFLATED) as zipf:
+            for file in song_files:
+                zipf.write(file, path.basename(file))
+        logger.info(f"Zipped {len(song_files)} files into {zip_file_path}")
 
     @staticmethod
     def upload_to_s3(zip_file_path, object_name=None):
@@ -217,35 +272,6 @@ class PlaylistSplitter:
             return presigned_url
         except Exception as e:
             logger.error(f"An error occurred at upload file to S3 : {type(e)} {e}")
-
-    @staticmethod
-    def split_and_save(input_file, temp_dir, segments, base_name=None):
-        audio = AudioSegment.from_file(input_file)
-        if base_name is None:
-            base_name = path.splitext(path.basename(input_file))[0]
-
-        def save_segment(i, start, end):
-            start_ms = start * 1000
-            end_ms = end * 1000
-            output_file = path.join(temp_dir, f"{i:02}_{base_name}.mp3")
-            target_audio = audio[start_ms:end_ms]
-            target_audio.export(output_file, format="mp3")
-            return output_file
-
-        song_files = []
-        with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(save_segment, i, start, end) for i, (start, end) in enumerate(segments, start=1)]
-            for future in futures:
-                song_files.append(future.result())
-
-        return song_files
-
-    @staticmethod
-    def zip_files(song_files, zip_file_path):
-        with ZipFile(zip_file_path, 'w', compression=ZIP_DEFLATED) as zipf:
-            for file in song_files:
-                zipf.write(file, path.basename(file))
-        logger.info(f"Zipped {len(song_files)} files into {zip_file_path}")
 
     @staticmethod
     def sanitize_filename(filename, replacement="_"):

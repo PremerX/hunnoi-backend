@@ -1,3 +1,5 @@
+import gc
+
 from fastapi import WebSocket, WebSocketDisconnect
 from app.ValidateYoutubeUrl import ValidateYoutubeUrl
 from app.PlaylistSplitter import PlaylistSplitter

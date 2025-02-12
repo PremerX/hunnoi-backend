@@ -12,6 +12,11 @@ services:
       - /root/hunnoi-backend/youtube_cookies.txt:/code/app/cookies.txt
     networks:
       - main-service
+    deploy:
+      resources:
+        limits:
+          cpus: '0.80'
+          memory: 1.35G
     restart: unless-stopped
 networks:
   main-service:

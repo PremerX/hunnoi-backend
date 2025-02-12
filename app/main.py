@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.ValidateYoutubeUrl import ValidateYoutubeUrl
 from app.WebsocketManager import WebsocketManager
 from app.WorkerManager import WorkerManager
-from app.request_arg import URLCheck
+from app.RequestArgument import URLCheck
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -49,3 +49,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)
