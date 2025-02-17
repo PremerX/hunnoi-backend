@@ -45,12 +45,14 @@ class WorkerManager:
             data = await ws.receive_text()
             data = ValidateYoutubeUrl(data).result()
             tag = str(uuid.uuid4())
-            await PlaylistSplitter(data, tag, ws).run()
+            splitter = PlaylistSplitter(data, tag, ws)
+            await splitter.run()
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected during processing")
         except Exception as e:
             logger.error(f"Worker error: {traceback.format_exc()}")
             await ws.send_json({"status": ProcessEnum.ERROR.value})
         finally:
-            self.process_lock.release()
             await ws.close()
+            del splitter
+            self.process_lock.release()

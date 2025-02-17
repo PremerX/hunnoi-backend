@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from boto3.s3.transfer import TransferConfig, MB
 from zipfile import ZipFile, ZIP_DEFLATED
 from tempfile import TemporaryDirectory
 from app.ProcessEnum import ProcessEnum
@@ -10,6 +11,7 @@ from yt_dlp import YoutubeDL
 from re import sub
 import numpy as np
 import boto3
+import shutil
 import asyncio
 import librosa
 import gc
@@ -42,12 +44,12 @@ class PlaylistSplitter:
                 ProcessEnum.PROCESSING,
                 "กำลังตรวจสอบเพลง"
             )
-            raw_song_file = path.join(temp_dir, self.tag, f"{ids}.mp3")
+            playlist_path = path.join(temp_dir, self.tag, f"{ids}.mp3")
 
             # Calculate audio segments
             segments = await asyncio.to_thread(
                 self.calculate_segments_numpy,
-                raw_song_file
+                playlist_path
             )
 
             # Handle when segments groups cannot be separated (Single song, Segmentation error, etc.)
@@ -73,7 +75,7 @@ class PlaylistSplitter:
             )
             split_song_files = await asyncio.to_thread(
                 self.split_and_save,
-                raw_song_file,
+                playlist_path,
                 path.join(temp_dir, self.tag),
                 segments,
                 title)
@@ -84,6 +86,7 @@ class PlaylistSplitter:
                 ProcessEnum.PROCESSING,
                 "แบ่งเพลงสำเร็จ รออีกนิด กำลังสร้างลิ้งดาวน์โหลด"
             )
+
             zip_path = path.join(temp_dir, self.tag, f"playlist_{title}.zip")
             await asyncio.to_thread(
                 self.zip_files,
@@ -231,9 +234,12 @@ class PlaylistSplitter:
 
     @staticmethod
     def zip_files(song_files, zip_file_path):
+        length = 10 * 1024 * 1024 # 10MB Stream zip
         with ZipFile(zip_file_path, 'w', compression=ZIP_DEFLATED) as zipf:
             for file in song_files:
-                zipf.write(file, path.basename(file))
+                with open(file, "rb") as f:
+                    with zipf.open(path.basename(file), "w") as dest:
+                        shutil.copyfileobj(f, dest, length=length)
         logger.info(f"Zipped {len(song_files)} files into {zip_file_path}")
 
     @staticmethod
@@ -257,8 +263,12 @@ class PlaylistSplitter:
             if object_name is None:
                 object_name = '/'.join(zip_file_path.split('/')[-2:])
 
+            transfer_config = TransferConfig(
+                multipart_threshold=10 * MB,
+                multipart_chunksize=10 * MB
+            )
             # Upload the file
-            s3_client.upload_file(zip_file_path, bucket_name, object_name)
+            s3_client.upload_file(zip_file_path, bucket_name, object_name, Config=transfer_config)
             logger.info(f"Uploaded {zip_file_path} to bucket '{bucket_name}' as '{object_name}'.")
 
             # Generate presigned URL
